@@ -1,0 +1,330 @@
+---
+title: "Tipologia i cicle de vida de les dades, PRAC 2"
+author: "Joan Borràs"
+date: "15/5/2022"
+output: html_document
+---
+
+
+
+
+## 1. Descripció del dataset. Perquè és important i quina pregunta/problema pretén respondre
+
+El dataset seleccionat es diu 'Red Wine Quality' i recull un conjunt de característiques associades al vi negre que pretenen descriure o determinar si es tracta d'un vi bo o contràriament un vi dolent.Aquestes característiques o variables són les següents:
+
+- fixed acidity : acidesa del vi que no s'evapora fàcilment.
+- volatile acidity: quantitat d'àcid acètic del vi- citric acid: quantitat d'àcid cítric
+- residual sugar: quantitat de sucre remenen després de la fermentació- chlorides: quantitat de sal en el vi
+- free sulfur dioxide: quantitat de diòxid de sulfur lliure resultant de l'equilibi amb el bisulfit.
+- total sulfur dioxide: quantitat total de diòxid de sulfur
+- density: quantitat i densitat de l'aigua depenent del percentatge d'alcohol i sucre
+- PH: ph del vi- sulphates: quantitat de sulfats.
+- Alcohol: quantitat d'alchol del vi
+- quality: variable target que determina la qualitat en una escala del 1 al 10
+
+
+
+```{r chunk0}
+# Carraguem el dataframe i mostrem les variables 
+wine_df <- read.csv("winequality-red.csv",header=T,sep=",", stringsAsFactors = FALSE)
+str(wine_df)
+```
+
+
+## 2. Integració i selecció de les dades d’interès a analitzar. Pot ser el resultat d’addicionar diferents datasets o una subselecció útil de les dades originals, en base a l’objectiu que es vulgui aconseguir.
+
+El dataframe seleccionat es pot considerar prou complet i no seria necessàri ampliar. Tampoc resulta òptim simplificar ni reealitzar una subselecció de variables ja que el model predictiu perdria validesa al no disposar de totes les característiques o variables al complet. 
+
+No obstant, amb objecte d'estudiar i visualitzar millor les dades, podem crear una columna que categoritzi la qualitat entre molt bo, bo, normal, dolent o molt dolent. 
+Tenint en compte que la variable quality es distribueix en un rang del 0 al 10, categoritzarem de la següent manera:
+
+de [0 a 3) molt dolent,
+de [3 a 5) dolent,
+de [5 a 6) normal, 
+de [6 a 8) bo,
+i de [8 a 10] molt bo.
+
+```{r chunk1}
+# Categoritzem la variable quality
+wine_df$quality_cat <- cut(wine_df$quality, breaks = c(0, 3, 5, 6, 8, 10),
+                  labels = c("molt dolent", "dolent", "normal", "bo", "molt bo"))
+
+```
+
+Comprovem que s'ha categoritzat correctament
+```{r chunk2}
+# Mostrem el resultat
+str(wine_df)
+
+```
+
+
+Un cop categoritzades les dades, podem observar com es distribueixen
+
+```{r chunk3}
+# Importem llibreria
+library("ggplot2")
+
+# Mostrem la distribució de la variable quality_cat
+ggplot(wine_df, aes(x=quality_cat)) +
+  geom_bar()
+```
+
+Podem observar que el major nombre de registres corresponen a l'etiqueta dolent, mentre que per l'etiqueta molt dolent existeixen molt pocs registres. 
+
+Com que ja no farem ús d'aquesta columna, guardem el csv modificat. 
+
+```{r chunk4}
+write.csv(wine_df,"wines_df_mod.csv", row.names = FALSE)
+```
+
+
+Seguidament, un cop realitzada la distribució de la variable quality_cat, proseguim a eliminar-la per tal de seguir estudiant el dataset amb solsament variables numèriques. 
+
+```{r chunk5}
+# Eliminem la variable quality_cat
+wine_df$quality_cat <- NULL
+```
+
+
+
+## 3. Neteja de les dades.
+
+### 3.1. Les dades contenen zeros o elements buits? Gestiona cadascun d’aquests casos.
+```{r chunk6}
+# Comprovem si existeixen elements nulls en el dataset
+is.null(wine_df)
+# Comprovem si existeixen 0 en el dataset
+colSums(wine_df==0)
+```
+
+Podem observar que a la columna citric.acid hi ha una gran quantitat de 0. Al tractar-se d'una variable que raonablement pot contenir 0, és a dir, pot ser que en un vi no hi hagi l'existència de àcid cítric, en el tractament de aquestes dades no cadrà eliminar aquests registres o substituir-los per algun estadístic com per exemple, la mitjana d'aquest valor. 
+
+
+
+
+
+### 3.2. Identifica i gestiona els valors extrems.
+
+Tractarem de detectar els valors outliers mitjaçant un un gràfic de caixes, que mostra per una banda els valors dintre de la normalitat(caixa) i, per altra banda, els valors fora de aquesta normalitat (fora de la caixa).
+
+
+```{r chunk7}
+# Mostrem la gràfica dels valors outliers
+win_out <-boxplot(wine_df, col="skyblue", frame.plot=F)
+```
+
+Mostrem aquests valors outliers
+
+```{r chunk8}
+# Mostrem els valors
+win_out$out
+```
+
+Eliminem aquests valors per tal de no esbiaixar l'estudi de les dades
+
+```{r chunk9}
+# Eliminem els outliers
+wine_df <-wine_df[!(wine_df %in% win_out$out),]
+```
+
+
+
+
+## 4. Anàlisi de les dades.
+
+### 4.1. Selecció dels grups de dades que es volen analitzar/comparar (p. e., si es volen comparar grups de dades, quins són aquests grups i quins tipus d’anàlisi s’aplicaran?).
+
+
+En primer lloc estudiarem les diverses distribucions de les variables en funció de la variable objectiu. 
+
+Tenint en compte la naturalesa del dataset, en primer lloc estudiarem les correlacions entre totes les variables.En el cas que s'observin variables altament relacionades, aplicarem un test Xi2 per tal de contrastar si aquestes són independents. 
+
+Finalment realitzarem una regressió lineal múltiple per veure l'influència de cada variable en la variable target, en aquest cas, Quality.
+
+
+També veurem les distribucions que segueixen les diferents variables segons la qualitat del vi. Resultarà interessant comprobar també 
+
+
+### 4.2. Comprovació de la normalitat i homogeneïtat de la variància.
+
+En primer lloc, per tal d'estudiar la normalitat de les variables farem servir un gràfic quantil-quantil que ens dona informació sobre la distribució dels valors de cada variable. 
+
+
+
+```{r chunk10}
+
+# Creem les gràfiques de distribució qq (quantil quantil)
+qqnorm(wine_df$fixed.acidity, main="fixed.acidity distribution")
+qqline(wine_df$fixed.acidity, col = 2)
+
+qqnorm(wine_df$volatile.acidity, main="volatile.acidity distribution")
+qqline(wine_df$volatile.acidity, col = 2)
+
+qqnorm(wine_df$citric.acid, main="citric.acid distribution")
+qqline(wine_df$citric.acid, col = 2)
+
+qqnorm(wine_df$residual.sugar, main="residual.sugar distribution")
+qqline(wine_df$residual.sugar, col = 2)
+
+qqnorm(wine_df$chlorides, main="chlorides distribution")
+qqline(wine_df$chlorides, col = 2)
+
+qqnorm(wine_df$free.sulfur.dioxide, main="free.sulfur.dioxide distribution")
+qqline(wine_df$free.sulfur.dioxide, col = 2)
+
+
+qqnorm(wine_df$total.sulfur.dioxide, main="total.sulfur.dioxide distribution")
+qqline(wine_df$total.sulfur.dioxide, col = 2)
+
+qqnorm(wine_df$density, main="density distribution")
+qqline(wine_df$density, col = 2)
+
+qqnorm(wine_df$pH, main="pH distribution")
+qqline(wine_df$pH, col = 2)
+
+qqnorm(wine_df$sulphates, main="sulphates distribution")
+qqline(wine_df$sulphates, col = 2)
+
+qqnorm(wine_df$alcohol, main="alcohol distribution")
+qqline(wine_df$alcohol, col = 2)
+
+qqnorm(wine_df$quality, main="quality distribution")
+qqline(wine_df$quality, col = 2)
+```
+
+Pel les variables independetns, tot i que les seves cues no segueixen exactament la linea transversal, la major part de les dades semblen estar distribuïdes de forma normal. No obstant, la variable qualitat no sembla seguir aquesta distribució.
+
+
+
+
+
+
+
+### 4.3. Aplicació de proves estadístiques per comparar els grups de dades. En funció de les dades i de l’objectiu de l’estudi, aplicar proves de contrast d’hipòtesis, correlacions, regressions, etc. Aplicar almenys tres mètodes d’anàlisi diferents.
+
+```{r chunk11}
+# Mostrem les distribucions de les diferents variables en funció de la qualitat
+fx_ac <- ggplot(aes(x=quality,y=fixed.acidity),data=wine_df)+
+  geom_point()
+
+vlt_ac <- ggplot(aes(x=quality,y=volatile.acidity),data=wine_df)+
+  geom_point()
+
+ctrc_ac <- ggplot(aes(x=quality,y=citric.acid),data=wine_df)+
+  geom_point()
+
+
+r_sugr <- ggplot(aes(x=quality,y=residual.sugar),data=wine_df)+
+  geom_point()
+
+
+chlor <- ggplot(aes(x=quality,y=chlorides),data=wine_df)+
+  geom_point()
+
+
+f_slr_dox <- ggplot(aes(x=quality,y=free.sulfur.dioxide),data=wine_df)+
+  geom_point()
+
+
+ttl_sl_dox <- ggplot(aes(x=quality,y=total.sulfur.dioxide),data=wine_df)+
+  geom_point()
+
+
+densty <- ggplot(aes(x=quality,y=density),data=wine_df)+
+  geom_point()
+
+ph <- ggplot(aes(x=quality,y=pH),data=wine_df)+
+  geom_point()
+
+
+suplh <- ggplot(aes(x=quality,y=sulphates),data=wine_df)+
+  geom_point()
+
+alco <-ggplot(aes(x=quality,y=alcohol),data=wine_df)+
+  geom_point()
+
+
+library(ggpubr)
+
+
+ggarrange(fx_ac, vlt_ac, ctrc_ac, r_sugr, chlor, f_slr_dox, ttl_sl_dox, densty, ph, suplh, alco + rremove("x.text"), 
+          labels = c("fixed.acidity", "volatile.acidity", "citric.acid", "residual.sugar","chlorides", "free.sulfur.dioxide","total.sulfur.dioxide", "density","pH", "sulphates", "alcohol"),
+          ncol = 4, nrow = 3, heights = c(25, 25))
+```
+
+De les anteriors gràfiques en podem destacar que els vins de alta qualitat porten menys volatile-acid, residual.sugar, chlorides, són menys densos, tenen un ph equilibrat, i no tenen més de 1.3 de sulfats. 
+
+
+Proseguim estudiant les diverses correlacions entre variables. 
+
+```{r chunk12}
+# Creem una matriu de correlacions
+cor(wine_df)
+```
+
+De la taula de correlacions anterior, podem veure que entre fixed.acidity i ph hi ha una correlació inversament proporcional del 68.29%. Això ens pot fer pensar que existeix algún tipus de relació entre aquestes variables i que, per tant, no són independents. 
+
+Per tal de verificar aquest supòsit, realitzarem un test xi2 on les hipòtesis seràn les següents:
+
+
+H0 : pH i fixed.acidity són independents
+H1 : pH i fixed.acidity no són independents
+
+
+En primer lloc, construim la taula de contingència
+```{r chunk13}
+# Creem la taula de contingència
+cont_table <- table(wine_df$pH, wine_df$fixed.acidity)
+```
+
+```{r chunk14}
+# Executem el test xi2
+chisq.test(cont_table)
+```
+Els resultats mostren com el p-value és menor a 0.05 i per tant, rebutgem la hipòtesis nul.la. Per tant, podem afirmar que les variables ph i fixed.acidity no són independents. 
+
+
+
+
+Finalment, realitzarem una regressó lineal múltiple per tal d'observar com varia la qualitat del vi en funció de les variables independents. 
+
+```{r chunk15}
+# Creem una regressió lienal múltiple
+mlr_wine <- lm(quality ~ fixed.acidity + volatile.acidity +citric.acid + residual.sugar + chlorides +free.sulfur.dioxide + total.sulfur.dioxide + density + pH + sulphates + alcohol, data = wine_df )
+summary(mlr_wine)
+```
+
+Tot i que el model no sigui molt acurat, ja que la R2 ajusted és tan sols del 35.61% podem veure que el nivell de sulfats és una de les variables més rellevants a l'hora de determinar la qualitat del vi. També podem veure per altra banda, que el ph determina de forma inversa la qualitat del vi de forma rellevant. 
+
+a continuació, podem predir quin resultat tindrà un vi segons les caracteristiques que li imputem
+
+
+
+
+
+```{r chunk16}
+# Creem el dataframe amb les noves dades
+predict_df = data.frame(fixed.acidity = 7.9,
+                    volatile.acidity = 0.67,
+                    citric.acid = 0.08,
+                    residual.sugar = 2.2,
+                    chlorides = 0.071,
+                    free.sulfur.dioxide =14,
+                    total.sulfur.dioxide = 67,
+                    density = 0.998,
+                    pH = 3.22,
+                    sulphates = 0.60,
+                    alcohol = 10.6)
+
+
+# Predim 
+predict(mlr_wine, predict_df)
+```
+
+
+El vi eleborat, no serà apte pels paladars més fins ja que tindrà una qualitat de 5.46 segons el model.
+
+
+
+
