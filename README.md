@@ -15,6 +15,6 @@ Per aquesta pràctica, jo, Joan Borràs, l'he realitzat de manera individual.
 
 - CSV original
 
--CSV modificat
+- CSV modificat
 
--
+
